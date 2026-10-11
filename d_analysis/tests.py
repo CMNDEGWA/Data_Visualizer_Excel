@@ -77,6 +77,46 @@ class UploadPipelineTests(TestCase):
 			2.0,
 		)
 
+	def test_dashboard_displays_persisted_workbook_and_processing_details(self):
+		upload_file = workbook_upload(
+			'regional-report.xlsx',
+			[('Sales Data', [['Region', 'Amount'], ['North', 8], ['South', 6]])],
+		)
+		self.client.post('/', {'file': upload_file})
+		upload = Upload.objects.get(original_filename='regional-report.xlsx')
+		MetricSnapshot.objects.create(
+			upload=upload,
+			metric_name='Total Amount',
+			metric_value=14,
+			category='General',
+			calculation_metadata={'field': 'amount', 'value_count': 2},
+		)
+		ProcessingLog.objects.create(
+			upload=upload,
+			severity='WARNING',
+			sheet_name='Sales Data',
+			row_index=3,
+			column_name='Amount',
+			message='Example validation warning.',
+		)
+
+		response = self.client.get(f'/dashboard/{upload.id}/')
+
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, 'Upload status')
+		self.assertContains(response, 'Processing job')
+		self.assertContains(response, 'Worksheet Inspection')
+		self.assertContains(response, 'Region, Amount')
+		self.assertContains(response, 'Header row 1')
+		self.assertContains(response, 'Column Mappings')
+		self.assertContains(response, 'custom_amount')
+		self.assertContains(response, 'Total Amount')
+		self.assertContains(response, 'Field: amount')
+		self.assertContains(response, 'Values used: 2')
+		self.assertContains(response, 'Column Amount')
+		self.assertContains(response, 'Example validation warning.')
+		self.assertContains(response, 'id="sheet-data"')
+
 	def test_rejects_workbook_without_any_data_sheets_and_keeps_failure_visible(self):
 		upload_file = workbook_upload(
 			'presentation-only.xlsx',

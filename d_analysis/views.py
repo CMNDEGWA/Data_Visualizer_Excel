@@ -1,5 +1,3 @@
-import json
-
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.utils import timezone
@@ -88,29 +86,30 @@ def upload_view(request):
 def dashboard_view(request, upload_id):
     """Renders the executive summary dashboard with KPIs and logs."""
     upload = get_object_or_404(Upload, id=upload_id)
-    sheets = upload.sheets.all()
-    metrics = upload.metrics.all()
+    sheets = upload.sheets.all().order_by('sheet_name')
+    metrics = upload.metrics.all().order_by('category', 'metric_name')
     logs = upload.logs.all().order_by('-created_at')[:20]
-    mappings = upload.mappings.all()
-    
-    # Prepare data for Chart.js
-    chart_labels = [m.metric_name for m in metrics]
-    chart_values = [m.metric_value for m in metrics]
-    
-    # Sheet row counts for a secondary chart breakdown
-    sheet_labels = [s.sheet_name for s in sheets]
-    sheet_row_counts = [s.row_count for s in sheets]
+    mappings = upload.mappings.all().order_by('sheet_name', 'source_header')
+    overview_metrics = metrics.filter(category='Overview')
+    detail_metrics = metrics.exclude(category='Overview')
+    sheet_chart_data = [
+        {
+            'sheet_name': sheet.sheet_name,
+            'row_count': sheet.row_count,
+            'is_valid_data_sheet': sheet.is_valid_data_sheet,
+        }
+        for sheet in sheets
+    ]
 
     context = {
         'upload': upload,
+        'job': getattr(upload, 'job', None),
         'sheets': sheets,
-        'metrics': metrics,
+        'overview_metrics': overview_metrics,
+        'detail_metrics': detail_metrics,
+        'sheet_chart_data': sheet_chart_data,
         'logs': logs,
         'mappings': mappings,
-        'chart_labels_json': json.dumps(chart_labels),
-        'chart_values_json': json.dumps(chart_values),
-        'sheet_labels_json': json.dumps(sheet_labels),
-        'sheet_row_counts_json': json.dumps(sheet_row_counts),
     }
     return render(request, 'd_analysis/dashboard.html', context)
 
