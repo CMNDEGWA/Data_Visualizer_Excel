@@ -13,7 +13,8 @@ It discovers worksheets and header rows, automatically maps recognized column na
 - Trim text values, skip blank rows, and validate recognized numeric farm-area and harvest values.
 - Record upload and processing-job status, processing failures, and validation log entries.
 - Calculate sheet and record totals, plus sums for recognized farm-area and harvest fields.
-- View metrics, worksheet details, column mappings, and recent processing logs on a dashboard.
+- View upload and processing details, worksheet inspections, column mappings, calculated metrics, and recent processing logs on a dashboard.
+- Compare inspected data-row counts across worksheets in a Chart.js bar chart.
 - Review recent uploads and delete completed or failed uploads.
 
 ### Architecture
@@ -42,9 +43,7 @@ It discovers worksheets and header rows, automatically maps recognized column na
         UI Styling                  -           Tailwind CSS (CDN)
         Optional Administration     -           pgAdmin
 
-Celery and Redis are listed in the project dependencies but are not currently connected to the workbook processing workflow. 
-        
-        Chart.js, Plotly, and Vue.js are not used by the current dashboard.
+Celery and Redis are listed in the project dependencies but are not currently connected to the workbook processing workflow. Chart.js is used for the worksheet row-count chart; Plotly and Vue.js are not used by the current dashboard.
 
 ## Data Processing Workflow
 
@@ -67,7 +66,7 @@ Celery and Redis are listed in the project dependencies but are not currently co
     The application stores the uploaded file and processing metadata, sheet inspections, column mappings, metric snapshots, and processing logs in PostgreSQL. Processing runs synchronously as part of the upload request; failures update the job and upload status and create an error log.
 
 7. **Present**:
-    The dashboard displays file details, discovered sheets and row counts, computed metrics, column mappings and confidence values, and the latest 20 processing logs. It does not currently provide charts or report exports.
+    The dashboard displays upload and job status, upload and processing times, worksheet headers and inspection warnings, column mappings and confidence values, calculated metrics and available calculation metadata, and the latest 20 processing logs. A Chart.js bar chart compares recorded row counts by worksheet. Mappings are not editable, and report exports are not available.
 
 ### Django Application Structure
 
@@ -118,9 +117,10 @@ Cleaned row data is processed in memory and is not stored in a processed-record 
 The dashboard displays:
 
     - Uploaded file size and number of discovered sheets.
-    - Computed metric values, including processed sheet and record totals.
-    - Worksheet names, data/reference classification, header counts, and row counts.
-    - Automatically generated mappings and their confidence scores.
-    - The latest 20 validation and processing log entries.
+    - Upload and processing-job status, upload time, processing times, and processor version.
+    - Overview totals and calculated metrics with their stored category and calculation details.
+    - Worksheet row counts in a chart, plus each worksheet's detected headers, header row, inclusion status, and inspection warnings.
+    - Automatically generated mappings, including source headers, mapped fields, and confidence scores.
+    - The latest 20 validation and processing log entries, including timestamps and available row and column details.
 
-The dashboard does not currently include charts, editable mappings, data-completeness scores, or export options.
+The dashboard does not include editable mappings, data-completeness scores, or export options. It displays saved metrics only; it does not retain cleaned rows for interactive filtering or regrouping.
