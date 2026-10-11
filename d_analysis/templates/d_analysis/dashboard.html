@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <title>Dashboard - {{ upload.original_filename }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-slate-50 min-h-screen">
-    <nav class="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
+    <nav class="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
         <div class="flex items-center space-x-3">
             <span class="text-xl font-black text-violet-600">DataVisualizer</span>
             <span class="text-slate-300">/</span>
@@ -17,7 +18,7 @@
 
     <main class="max-w-7xl mx-auto px-6 py-8">
         <!-- KPI Summary Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                 <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">File Size</span>
                 <p class="text-2xl font-bold text-slate-800 mt-1">{{ upload.file_size|filesizeformat }}</p>
@@ -26,7 +27,7 @@
                 <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Sheets Discovered</span>
                 <p class="text-2xl font-bold text-slate-800 mt-1">{{ sheets.count }}</p>
             </div>
-            {% for metric in metrics %}
+            {% for metric in metrics|slice:":2" %}
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                 <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">{{ metric.metric_name }}</span>
                 <p class="text-2xl font-bold text-violet-600 mt-1">{{ metric.metric_value }}</p>
@@ -34,44 +35,35 @@
             {% endfor %}
         </div>
 
-        {% if mappings %}
-        <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8">
-            <h2 class="text-lg font-bold text-slate-800 mb-4">Column Mappings</h2>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left">
-                    <thead class="text-xs uppercase text-slate-500 border-b border-slate-200">
-                        <tr>
-                            <th class="py-3 pr-4">Worksheet</th>
-                            <th class="py-3 pr-4">Source Header</th>
-                            <th class="py-3 pr-4">Standard Field</th>
-                            <th class="py-3">Confidence</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        {% for mapping in mappings %}
-                        <tr>
-                            <td class="py-3 pr-4">{{ mapping.display_sheet_name }}</td>
-                            <td class="py-3 pr-4">{{ mapping.source_header }}</td>
-                            <td class="py-3 pr-4">{{ mapping.standardized_field }}</td>
-                            <td class="py-3">{{ mapping.confidence_score|floatformat:2 }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+        <!-- Chart.js Visualization Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <!-- Sheet Row Distribution Chart -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <h2 class="text-lg font-bold text-slate-800 mb-4">Sheet Row Distribution</h2>
+                <div class="relative h-72">
+                    <canvas id="sheetRowChart"></canvas>
+                </div>
             </div>
-        </section>
-        {% endif %}
 
-        <!-- Sheets & Headers Breakdown -->
+            <!-- Extracted Metrics Chart -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <h2 class="text-lg font-bold text-slate-800 mb-4">Extracted Dataset Metrics</h2>
+                <div class="relative h-72">
+                    <canvas id="metricsChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sheets & Audit Logs Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h2 class="text-lg font-bold text-slate-800 mb-4">Discovered Sheets & Row Counts</h2>
+                <h2 class="text-lg font-bold text-slate-800 mb-4">Discovered Sheets & Headers</h2>
                 <div class="space-y-3">
                     {% for sheet in sheets %}
                     <div class="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
                         <div>
-                            <span class="font-semibold text-slate-700">{{ sheet.display_name }}</span>
-                            <span class="block text-xs text-slate-500">{% if sheet.is_valid_data_sheet %}Data sheet{% else %}Reference sheet{% endif %} · {{ sheet.detected_headers|length }} headers</span>
+                            <span class="font-semibold text-slate-700">{{ sheet.sheet_name }}</span>
+                            <span class="block text-xs text-slate-500">Headers: {{ sheet.detected_headers|length }} columns</span>
                         </div>
                         <span class="bg-violet-100 text-violet-700 text-xs font-bold px-3 py-1 rounded-full">{{ sheet.row_count }} rows</span>
                     </div>
@@ -79,7 +71,6 @@
                 </div>
             </div>
 
-            <!-- Processing Audit Logs -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                 <h2 class="text-lg font-bold text-slate-800 mb-4">Validation Audit Log</h2>
                 <div class="overflow-y-auto max-h-60 space-y-2">
@@ -95,5 +86,56 @@
             </div>
         </div>
     </main>
+
+    <!-- Chart.js Initialization Script -->
+    <script>
+        // Sheet Row Distribution Bar Chart
+        const sheetCtx = document.getElementById('sheetRowChart').getContext('2d');
+        const sheetRowChart = new Chart(sheetCtx, {
+            type: 'bar',
+            data: {
+                labels: JSON.parse('{{ sheet_labels_json|safe }}'),
+                datasets: [{
+                    label: 'Row Count',
+                    data: JSON.parse('{{ sheet_row_counts_json|safe }}'),
+                    backgroundColor: 'rgba(124, 58, 237, 0.7)',
+                    borderColor: 'rgba(124, 58, 237, 1)',
+                    borderWidth: 1,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // Metrics Doughnut/Bar Chart
+        const metricsCtx = document.getElementById('metricsChart').getContext('2d');
+        const metricsChart = new Chart(metricsCtx, {
+            type: 'doughnut',
+            data: {
+                labels: JSON.parse('{{ chart_labels_json|safe }}'),
+                datasets: [{
+                    data: JSON.parse('{{ chart_values_json|safe }}'),
+                    backgroundColor: [
+                        'rgba(124, 58, 237, 0.8)',
+                        'rgba(14, 165, 233, 0.8)',
+                        'rgba(16, 185, 129, 0.8)',
+                        'rgba(245, 158, 11, 0.8)',
+                        'rgba(239, 68, 68, 0.8)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+    </script>
 </body>
 </html>
