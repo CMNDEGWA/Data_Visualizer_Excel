@@ -1,7 +1,9 @@
 # d_analysis/services/validator.py
 
 import pandas as pd
-from d_analysis.models import Upload, ProcessingLog
+from numbers import Number
+
+from d_analysis.models import DuplicateValue, Upload, ProcessingLog
 
 class DataValidator:
     """This validates and cleans data rows, handles missing optional fields, and logs audit warnings."""
@@ -36,6 +38,7 @@ class DataValidator:
                     header=sheet.header_row_index,
                 )
                 df.columns = [str(column).strip() for column in df.columns]
+                self._record_duplicate_values(df, sheet)
 
                 cleaned_rows = []
                 sheet_mappings = mapping_by_sheet.get(sheet.sheet_name, {})
@@ -98,3 +101,36 @@ class DataValidator:
                 cleaned_data_cache[sheet.sheet_name] = cleaned_rows
 
         return cleaned_data_cache
+
+    def _record_duplicate_values(self, dataframe, sheet):
+        for column in dataframe.columns:
+            groups = {}
+            for row_offset, value in enumerate(dataframe[column].tolist()):
+                if pd.isna(value):
+                    continue
+                if isinstance(value, str):
+                    value = value.strip()
+                    if not value:
+                        continue
+
+                if isinstance(value, bool):
+                    key = ('boolean', value)
+                elif isinstance(value, Number):
+                    key = ('number', value)
+                else:
+                    key = (type(value).__name__, value)
+
+                group = groups.setdefault(key, {'value': value, 'row_indices': []})
+                group['row_indices'].append(sheet.header_row_index + row_offset + 2)
+
+            for group in groups.values():
+                if len(group['row_indices']) < 2:
+                    continue
+                DuplicateValue.objects.create(
+                    upload=self.upload,
+                    sheet_name=sheet.sheet_name,
+                    column_name=str(column),
+                    value=str(group['value']),
+                    occurrence_count=len(group['row_indices']),
+                    row_indices=group['row_indices'],
+                )
