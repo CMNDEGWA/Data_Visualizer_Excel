@@ -8,7 +8,7 @@ from django.test import TestCase, override_settings
 from openpyxl import Workbook
 
 from d_analysis.forms import ExcelUploadForm
-from d_analysis.models import MetricSnapshot, ProcessingJob, ProcessingLog, SheetInspection, Upload
+from d_analysis.models import DuplicateValue, MetricSnapshot, ProcessingJob, ProcessingLog, SheetInspection, Upload
 
 
 def workbook_upload(name, sheets):
@@ -106,8 +106,10 @@ class UploadPipelineTests(TestCase):
 		self.assertContains(response, 'Upload status')
 		self.assertContains(response, 'Processing job')
 		self.assertContains(response, 'Worksheet Inspection')
-		self.assertContains(response, 'Region, Amount')
-		self.assertContains(response, 'Header row 1')
+		self.assertContains(response, 'Detected headers')
+		self.assertContains(response, '>Region</li>')
+		self.assertContains(response, '>Amount</li>')
+		self.assertContains(response, 'Header row')
 		self.assertContains(response, 'Column Mappings')
 		self.assertContains(response, 'custom_amount')
 		self.assertContains(response, 'Total Amount')
@@ -116,6 +118,41 @@ class UploadPipelineTests(TestCase):
 		self.assertContains(response, 'Column Amount')
 		self.assertContains(response, 'Example validation warning.')
 		self.assertContains(response, 'id="sheet-data"')
+		self.assertContains(response, 'Export PDF')
+		self.assertContains(response, 'window.print()')
+		self.assertContains(response, '@media print')
+
+	def test_detects_repeated_values_per_column_and_shows_row_locations(self):
+		upload_file = workbook_upload(
+			'repeated-values.xlsx',
+			[('Sales Data', [
+				['Category', 'Reference', 'Memo'],
+				['North', 'R-1', 'match'],
+				['South', 'R-2', ' match '],
+				['North', 'R-3', 'unique'],
+				['', 'R-4', ''],
+			])],
+		)
+		self.client.post('/', {'file': upload_file})
+		upload = Upload.objects.get(original_filename='repeated-values.xlsx')
+
+		self.assertEqual(upload.status, 'COMPLETED')
+		self.assertEqual(upload.duplicate_values.count(), 2)
+		category_duplicate = upload.duplicate_values.get(column_name='Category')
+		self.assertEqual(category_duplicate.value, 'North')
+		self.assertEqual(category_duplicate.occurrence_count, 2)
+		self.assertEqual(category_duplicate.row_indices, [2, 4])
+		memo_duplicate = upload.duplicate_values.get(column_name='Memo')
+		self.assertEqual(memo_duplicate.value, 'match')
+		self.assertEqual(memo_duplicate.row_indices, [2, 3])
+		self.assertFalse(upload.duplicate_values.filter(column_name='Reference').exists())
+
+		response = self.client.get(f'/dashboard/{upload.id}/')
+		self.assertContains(response, 'Repeated Values')
+		self.assertContains(response, 'Sales Data')
+		self.assertContains(response, 'North')
+		self.assertContains(response, 'match')
+		self.assertContains(response, '2, 4')
 
 	def test_rejects_workbook_without_any_data_sheets_and_keeps_failure_visible(self):
 		upload_file = workbook_upload(
