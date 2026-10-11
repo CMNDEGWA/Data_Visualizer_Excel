@@ -91,6 +91,21 @@ class MetricSnapshot(models.Model):
     
     def __str__(self):
         return f"{self.metric_name}: {self.metric_value}"
+
+class DuplicateValue(models.Model):
+    """This records repeated values found within a single worksheet column."""
+    upload = models.ForeignKey(Upload, on_delete=models.CASCADE, related_name='duplicate_values')
+    sheet_name = models.CharField(max_length=255)
+    column_name = models.CharField(max_length=255)
+    value = models.TextField()
+    occurrence_count = models.PositiveIntegerField()
+    row_indices = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ['sheet_name', 'column_name', 'value']
+
+    def __str__(self):
+        return f"{self.sheet_name}.{self.column_name}: {self.value} ({self.occurrence_count})"
     
 class ProcessingLog(models.Model):
     """This audits warnings, missing data flags and malformed rows during ingestion"""
