@@ -92,6 +92,17 @@ def dashboard_view(request, upload_id):
     mappings = upload.mappings.all().order_by('sheet_name', 'source_header')
     overview_metrics = metrics.filter(category='Overview')
     detail_metrics = metrics.exclude(category='Overview')
+    duplicate_findings = [
+        {
+            'sheet_name': finding.sheet_name,
+            'column_name': finding.column_name,
+            'value': finding.value,
+            'occurrence_count': finding.occurrence_count,
+            'row_indices': finding.row_indices[:20],
+            'additional_locations': max(0, len(finding.row_indices) - 20),
+        }
+        for finding in upload.duplicate_values.all()
+    ]
     sheet_chart_data = [
         {
             'sheet_name': sheet.sheet_name,
@@ -107,6 +118,7 @@ def dashboard_view(request, upload_id):
         'sheets': sheets,
         'overview_metrics': overview_metrics,
         'detail_metrics': detail_metrics,
+        'duplicate_findings': duplicate_findings,
         'sheet_chart_data': sheet_chart_data,
         'logs': logs,
         'mappings': mappings,
