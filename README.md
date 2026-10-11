@@ -12,9 +12,11 @@ It discovers worksheets and header rows, automatically maps recognized column na
 - Automatically map supported column names to standardized fields and assign unmatched headers custom fields.
 - Trim text values, skip blank rows, and validate recognized numeric farm-area and harvest values.
 - Record upload and processing-job status, processing failures, and validation log entries.
+- Detect repeated non-blank values within each column of processed worksheets and retain their row locations.
 - Calculate sheet and record totals, plus sums for recognized farm-area and harvest fields.
 - View upload and processing details, worksheet inspections, column mappings, calculated metrics, and recent processing logs on a dashboard.
 - Compare inspected data-row counts across worksheets in a Chart.js bar chart.
+- Export a print-formatted dashboard using the browser's Save as PDF option.
 - Review recent uploads and delete completed or failed uploads.
 
 ### Architecture
@@ -57,16 +59,16 @@ Celery and Redis are listed in the project dependencies but are not currently co
     The mapper matches supported source headers to standardized fields using built-in aliases. Unmatched headers receive custom field names. Mappings are shown on the dashboard but cannot currently be edited by users.
 
 4. **Validate and Clean**:
-    The validator trims text, converts blank values to null, skips and logs blank rows, and converts recognized farm-area and harvest values to numbers. Invalid numeric values generate warnings. Cleaned rows are held in memory during processing and are not persisted as records.
+    The validator trims text, converts blank values to null, skips and logs blank rows, and converts recognized farm-area and harvest values to numbers. It records exact repeated non-blank values within each worksheet column, along with their Excel row locations. Invalid numeric values generate warnings. Other cleaned row data is held in memory during processing and is not persisted as records.
 
 5. **Analyze**:
     The application calculates the number of processed data sheets and records, plus sums for recognized farm-area and harvest fields when numeric values are available.
 
 6. **Persist**:
-    The application stores the uploaded file and processing metadata, sheet inspections, column mappings, metric snapshots, and processing logs in PostgreSQL. Processing runs synchronously as part of the upload request; failures update the job and upload status and create an error log.
+    The application stores the uploaded file and processing metadata, sheet inspections, column mappings, duplicate-value findings, metric snapshots, and processing logs in PostgreSQL. Processing runs synchronously as part of the upload request; failures update the job and upload status and create an error log.
 
 7. **Present**:
-    The dashboard displays upload and job status, upload and processing times, worksheet headers and inspection warnings, column mappings and confidence values, calculated metrics and available calculation metadata, and the latest 20 processing logs. A Chart.js bar chart compares recorded row counts by worksheet. Mappings are not editable, and report exports are not available.
+    The dashboard displays upload and job status, upload and processing times, worksheet headers and inspection warnings, column mappings and confidence values, calculated metrics and available calculation metadata, the latest 20 processing logs, and repeated values by worksheet column with row locations. A Chart.js bar chart compares recorded row counts by worksheet. Users can print the dashboard or save it as a PDF through the browser print dialog. Mappings are not editable.
 
 ### Django Application Structure
 
@@ -107,6 +109,8 @@ Workbook inspection, mapping, validation, and metric calculations are separated 
     Source header, standardized or custom field, confidence score, and mapping version.
 - **MetricSnapshot**:
     Upload, metric name and value, category, and calculation metadata.
+- **DuplicateValue**:
+    Upload, worksheet, column, repeated value, occurrence count, and Excel row locations.
 - **ProcessingLog**:
     Severity, message, and optional sheet, row, and column details.
 
@@ -122,5 +126,6 @@ The dashboard displays:
     - Worksheet row counts in a chart, plus each worksheet's detected headers, header row, inclusion status, and inspection warnings.
     - Automatically generated mappings, including source headers, mapped fields, and confidence scores.
     - The latest 20 validation and processing log entries, including timestamps and available row and column details.
+    - Repeated non-blank values within each worksheet column, including occurrence counts and up to 20 Excel row locations per value.
 
-The dashboard does not include editable mappings, data-completeness scores, or export options. It displays saved metrics only; it does not retain cleaned rows for interactive filtering or regrouping.
+The dashboard includes a print-friendly browser export that can be saved as PDF. It does not include editable mappings or data-completeness scores. It displays saved metrics only; it does not retain cleaned rows for interactive filtering or regrouping.
