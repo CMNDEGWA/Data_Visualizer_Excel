@@ -1,3 +1,5 @@
+import json
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.utils import timezone
@@ -90,6 +92,14 @@ def dashboard_view(request, upload_id):
     metrics = upload.metrics.all()
     logs = upload.logs.all().order_by('-created_at')[:20]
     mappings = upload.mappings.all()
+    
+    # Prepare data for Chart.js
+    chart_labels = [m.metric_name for m in metrics]
+    chart_values = [m.metric_value for m in metrics]
+    
+    # Sheet row counts for a secondary chart breakdown
+    sheet_labels = [s.sheet_name for s in sheets]
+    sheet_row_counts = [s.row_count for s in sheets]
 
     context = {
         'upload': upload,
@@ -97,6 +107,10 @@ def dashboard_view(request, upload_id):
         'metrics': metrics,
         'logs': logs,
         'mappings': mappings,
+        'chart_labels_json': json.dumps(chart_labels),
+        'chart_values_json': json.dumps(chart_values),
+        'sheet_labels_json': json.dumps(sheet_labels),
+        'sheet_row_counts_json': json.dumps(sheet_row_counts),
     }
     return render(request, 'd_analysis/dashboard.html', context)
 
